@@ -7,7 +7,8 @@ Microservicio de **reportería (KPIs)** de BarrioDigital (DSY1107). Consume los 
 | Puerto | `8084` |
 | Paquete base | `cl.duoc.ms_barriodigital_report` |
 | Stack | Spring Boot 4.1.2 · Java 17 · Maven |
-| Topic que consume | `solicitudes-eventos` (se renombrará a `requests.events` en otra tarea) |
+| Topic que consume | `requests.events` (lo crea ms-requests al arrancar; key = id de la solicitud) |
+| Topic de errores | `report.DLT` (lo crea report; ver tarea 2.6b) |
 | Consumer group | `report-processor` |
 | Base de datos | MySQL, esquema propio `barriodigital_report` |
 
@@ -198,7 +199,7 @@ cd ms-barriodigital-report
 
 > En PowerShell el `-D...` va **entre comillas**, si no Maven no lo reconoce.
 
-Debe terminar con `Started MsBarriodigitalReportApplication` y, unos segundos después, `report-processor: partitions assigned: [solicitudes-eventos-0, -1, -2]`.
+Debe terminar con `Started MsBarriodigitalReportApplication` y, unos segundos después, `report-processor: partitions assigned: [requests.events-0, -1, -2]`.
 
 La base `barriodigital_report` se crea sola (`createDatabaseIfNotExist=true`) y las tablas también (`ddl-auto=update`).
 
@@ -209,7 +210,7 @@ La base `barriodigital_report` se crea sola (`createDatabaseIfNotExist=true`) y 
 | ms-barriodigital-requests | 8081 |
 | ms-barriodigital-notifications | 8082 |
 | ms-barriodigital-rabbit-admin | 8083 |
-| ms-barriodigital-audit | 8083 ⚠️ choca con rabbit-admin, pendiente de cambiar |
+| ms-barriodigital-audit | 8087 |
 | **ms-barriodigital-report** | **8084** |
 | ms-barriodigital-catalog | 8085 (por crear) |
 | ms-barriodigital-kafka-admin | 8086 (por crear) |
@@ -225,10 +226,10 @@ Usa la consola que trae el contenedor de Kafka. Cada línea es un mensaje:
 
 ```powershell
 # Trámite creado
-'{"id":1,"tipo":"SOLICITUD_CREADA","comunaId":"Av. Siempre Viva 742","titulo":"PERMISO_OBRAS","descripcion":"Test","estado":"INGRESADO","timestamp":"2026-11-19T10:00:00"}' | docker exec -i kafka kafka-console-producer --bootstrap-server kafka:9093 --topic solicitudes-eventos
+'{"id":1,"tipo":"SOLICITUD_CREADA","comunaId":"Av. Siempre Viva 742","titulo":"PERMISO_OBRAS","descripcion":"Test","estado":"INGRESADO","timestamp":"2026-11-19T10:00:00"}' | docker exec -i kafka kafka-console-producer --bootstrap-server kafka:9093 --topic requests.events
 
 # El mismo trámite, resuelto 2 horas después
-'{"id":1,"tipo":"SOLICITUD_ACTUALIZADA","comunaId":"Av. Siempre Viva 742","titulo":"PERMISO_OBRAS","descripcion":"Test","estado":"RESUELTO","timestamp":"2026-11-19T12:00:00"}' | docker exec -i kafka kafka-console-producer --bootstrap-server kafka:9093 --topic solicitudes-eventos
+'{"id":1,"tipo":"SOLICITUD_ACTUALIZADA","comunaId":"Av. Siempre Viva 742","titulo":"PERMISO_OBRAS","descripcion":"Test","estado":"RESUELTO","timestamp":"2026-11-19T12:00:00"}' | docker exec -i kafka kafka-console-producer --bootstrap-server kafka:9093 --topic requests.events
 ```
 
 > Las fechas de prueba deben caer dentro del rango que consultas (`last24h` = últimas 24 h desde **ahora**). Ajusta el `timestamp` a la fecha del día.
@@ -287,6 +288,7 @@ Lo publica `ms-barriodigital-requests` (clase `SolicitudKafkaEvent`). **No lo ca
 | `tipo` | `SOLICITUD_CREADA` o `SOLICITUD_ACTUALIZADA` |
 | `titulo` | **El tipo de trámite** (`tipoTramite`). El nombre confunde, pero es eso. |
 | `comunaId` | Por ahora trae la dirección |
+| *key del mensaje* | El id de la solicitud: los eventos de un mismo trámite llegan en orden |
 | `estado` | Estado nuevo: `INGRESADO`, `ADMITIDO`, `EN_GESTION`, `EN_TERRENO`, `RESUELTO`, `RECHAZADO` |
 | `timestamp` | `LocalDateTime.toString()` → parsear con `LocalDateTime.parse(...)` |
 
@@ -319,7 +321,7 @@ spring.jpa.open-in-view=false
 
 # ========== KAFKA ==========
 spring.kafka.bootstrap-servers=${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
-report.kafka.topic=${REPORT_TOPIC:solicitudes-eventos}
+report.kafka.topic=${REPORT_TOPIC:requests.events}
 spring.kafka.consumer.group-id=report-processor
 spring.kafka.consumer.auto-offset-reset=earliest
 spring.kafka.consumer.key-deserializer=org.apache.kafka.common.serialization.StringDeserializer
@@ -377,6 +379,14 @@ Consultas necesarias (JPQL o `nativeQuery`):
 - Si el `timestamp` viene mal: loguear con `log.warn` y descartar el evento, sin romper el listener.
 - **Verificación:** publicar un evento (§3.1) → aparece en la tabla (§3.2).
 - **Commit:** `feat(report): consumer Kafka que registra eventos de solicitud`
+
+#### 2.6b DLT de report (`report.DLT`)
+Mismo patrón que ya funciona en **ms-barriodigital-audit**: copiar y cambiar `audit` por `report`.
+- `config/KafkaTopicConfig.java`: `NewTopic` `report.DLT` (3 particiones, `delete`, 14 días = `1209600000`). Ver `KafkaTopicConfig` de audit.
+- `config/KafkaErrorConfig.java`: `DefaultErrorHandler` + `DeadLetterPublishingRecoverer` → `report.DLT`, `FixedBackOff(1000L, 3)`. Copiar `KafkaErrorConfig` de audit.
+- `application.properties`: agregar el producer (`spring.kafka.producer.key-serializer=...StringSerializer` y `value-serializer=...JacksonJsonSerializer`).
+- **Verificación:** `'esto no es json' | docker exec -i kafka kafka-console-producer --bootstrap-server kafka:9093 --topic requests.events` → aparece en `report.DLT` (`kafka-console-consumer --topic report.DLT --from-beginning`).
+- **Commit:** `feat(report): DLT con 3 reintentos hacia report.DLT`
 
 ### Bloque C: `feature/report-api` (KPIs por REST)
 
@@ -453,5 +463,5 @@ Ejemplo de `/top-procedures`:
 | `No qualifying bean KafkaTemplate` / no consume | Usar `spring-boot-starter-kafka`, no `spring-kafka` directo |
 | `Communications link failure` (MySQL) | MySQL no está arriba o el puerto no es 3307: revisar `docker ps` |
 | PowerShell: `Unknown lifecycle phase ".test.skip=true"` | Poner `"-Dmaven.test.skip=true"` entre comillas |
-| El consumer no recibe nada | El topic lo crea audit/requests; si no existe: `docker exec kafka kafka-topics --bootstrap-server kafka:9093 --create --topic solicitudes-eventos --partitions 3 --replication-factor 1` |
+| El consumer no recibe nada | `requests.events` lo crea ms-requests al arrancar: levantar requests una vez, o crearlo con kafka-admin (`POST /api/v1/kafka-admin/topics`) |
 | Scripts `.sh` fallan en el contenedor (`^M`) | Guardarlos con fin de línea LF |
