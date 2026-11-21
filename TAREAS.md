@@ -153,7 +153,7 @@ Crea una carpeta común (por ejemplo `barrioDigitalApp/`) y clona dentro:
 mkdir barrioDigitalApp; cd barrioDigitalApp
 
 # Infraestructura (RabbitMQ + Kafka + MySQL en local)
-git clone https://github.com/BarrioDigital-2/ms-BarrioDigital-Notifications.git ms-barriodigital-notifications
+git clone https://github.com/BarrioDigital-2/barriodigital-infra.git
 
 # Este microservicio
 git clone https://github.com/BarrioDigital-2/ms-barriodigital-report.git
@@ -172,14 +172,14 @@ git checkout develop
 ### 2.3 Levantar la infraestructura con Docker
 
 ```powershell
-cd ms-barriodigital-notifications
+cd barriodigital-infra/local
 docker compose up -d
 docker ps
 ```
 
 Deben aparecer **5 contenedores**: `rabbit1`, `rabbit2`, `zookeeper`, `kafka`, `barriodigital-mysql`.
 
-> Importante: usar `docker compose up -d` **sin `-f`**. Así se carga `docker-compose.override.yml`, que agrega MySQL solo para local.
+> Más detalles y problemas comunes en el README de `barriodigital-infra`.
 
 | Servicio | Dirección desde tu PC | Credenciales |
 |----------|----------------------|--------------|
