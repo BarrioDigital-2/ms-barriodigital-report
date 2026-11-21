@@ -64,6 +64,7 @@ Cópiale estas reglas al inicio de la sesión:
 - Explicar qué hace cada comando antes de ejecutarlo.
 - Aplicar los principios SOLID (§1.4) y las convenciones de código (§1.5).
 - No tocar repos de otros integrantes sin acordarlo (por ejemplo `ms-barriodigital-requests`).
+- **Código simple** (ver §1.6): mínimas anotaciones, comentarios de una línea y nada que no se pueda explicar en una frase.
 
 ### 1.4 Principios SOLID aplicados a este microservicio
 
@@ -93,6 +94,40 @@ cl.duoc.ms_barriodigital_report
 ├── model/         (entidades JPA y enums)
 ├── repository/    (Spring Data JPA)
 └── service/       (interfaces + impl/)
+```
+
+### 1.6 Código simple (criterio de la entrega)
+
+Cada línea la tenemos que poder explicar en la evaluación. Regla: **si no lo puedes explicar en una frase, no va.** Spring ya hace mucho por defecto; no repetirlo.
+
+| ❌ No poner (Spring ya lo hace o no aporta) | ✅ Sí poner (aporta algo explicable) |
+|--------------------------------------------|--------------------------------------|
+| `@Repository` en interfaces que extienden `JpaRepository` | `@Column(unique = true)` cuando un valor no se puede repetir |
+| `@Column(name = "...")`: `fechaEvento` ya se convierte en `fecha_evento` | `@Modifying` + `@Query` cuando la consulta modifica datos |
+| `@Column(length/nullable)`: la validación va en el DTO | `@Valid` + `@NotBlank`/`@NotNull` en los DTOs de entrada |
+| `@Builder`, `@Builder.Default`, `@AllArgsConstructor` en entidades | `@Getter @Setter @NoArgsConstructor` en entidades |
+| `@Data` en entidades (genera equals/hashCode problemáticos en JPA) | `@Data @NoArgsConstructor @AllArgsConstructor` en DTOs |
+| Javadoc largo, text blocks `"""` | Un comentario de una línea donde el *por qué* no es obvio |
+
+Ejemplo de entidad con este criterio:
+```java
+@Entity
+@Table(name = "evento_solicitud")
+@Getter
+@Setter
+@NoArgsConstructor
+public class EventoSolicitud {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private Long solicitudId;
+    private String tipoEvento;
+    private String tipoTramite;
+    private String estado;
+    private LocalDateTime fechaEvento;
+}
 ```
 
 ---
@@ -221,7 +256,7 @@ curl.exe "http://localhost:8084/api/report/kpis?range=cualquiercosa"   # debe da
    cd ms-barriodigital-requests
    $env:DB_PORT="3307"; .\mvnw spring-boot:run "-Dmaven.test.skip=true"
    ```
-2. `POST http://localhost:8081/api/requests` con body:
+2. `POST http://localhost:8081/api/v1/requests` con body:
    ```json
    {"tipoTramite":"PERMISO_OBRAS","vecinoEmail":"test@vecino.cl","direccion":"Av. Siempre Viva 742","descripcion":"Test"}
    ```
@@ -318,7 +353,7 @@ logging.level.org.apache.kafka=WARN
 | `estado` | `String` | `evento.estado` |
 | `fechaEvento` | `LocalDateTime` | `LocalDateTime.parse(evento.timestamp)` |
 
-- Índice sobre `fechaEvento` (todas las consultas filtran por fecha).
+- Seguir el ejemplo de §1.6: solo `@Entity`, `@Table`, `@Id`/`@GeneratedValue` y Lombok `@Getter @Setter @NoArgsConstructor`.
 - **Commit:** `feat(report): entidad de eventos de solicitud`
 
 ### Bloque B: `feature/report-consumer` (recepción de eventos)
@@ -331,7 +366,7 @@ Consultas necesarias (JPQL o `nativeQuery`):
 2. **Ranking de tipos**: contar `SOLICITUD_CREADA` por `tipoTramite` desde una fecha, orden descendente.
 3. **Tiempo de resolución**: por cada `solicitudId`, diferencia entre la fecha de `SOLICITUD_CREADA` y la de `estado = RESUELTO`. Promedio en minutos u horas.
    - Pista MySQL: `AVG(TIMESTAMPDIFF(MINUTE, c.fecha_evento, r.fecha_evento))` con un *self-join* de la tabla (`c` = creada, `r` = resuelta).
-- Usar **proyecciones** (interfaces o records) para los resultados agregados, no `Object[]`.
+- Para los resultados agregados, una interfaz de proyección simple en vez de `Object[]`. Ej.: `interface ConteoPorTipo { String getTipoTramite(); Long getCantidad(); }`, y en la query `SELECT e.tipoTramite AS tipoTramite, COUNT(e) AS cantidad ...`.
 - **Commit:** `feat(report): consultas de KPIs en el repository`
 
 #### 2.6 Consumer + servicio de registro
@@ -404,6 +439,7 @@ Ejemplo de `/top-procedures`:
 - [ ] Controller y consumer dependen de interfaces; inyección por constructor
 - [ ] Sin entidades JPA expuestas en la API
 - [ ] Comentarios y logs en español
+- [ ] Código simple según §1.6: sin anotaciones que Spring ya resuelve solo
 - [ ] Sin credenciales nuevas *hardcodeadas* (usar `${VARIABLE:default}`)
 
 ---
