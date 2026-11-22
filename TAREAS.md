@@ -6,7 +6,7 @@ Microservicio de **reportería (KPIs)** de BarrioDigital (DSY1107). Consume los 
 |------|-------|
 | Puerto | `8084` |
 | Paquete base | `cl.duoc.ms_barriodigital_report` |
-| Stack | Spring Boot 4.1.2 · Java 17 · Maven |
+| Stack | Spring Boot 4.1.2 · Java 25 LTS · Maven |
 | Topic que consume | `requests.events` (lo crea ms-requests al arrancar; key = id de la solicitud) |
 | Topic de errores | `report.DLT` (lo crea report; ver tarea 2.6b) |
 | Consumer group | `report-processor` |
@@ -139,7 +139,7 @@ public class EventoSolicitud {
 
 | Herramienta | Versión | Verificar con |
 |-------------|---------|---------------|
-| JDK | 17 | `java -version` |
+| JDK | 25 LTS | `java -version` (solo si ejecutas Maven fuera de Docker) |
 | Docker Desktop | reciente, **encendido** | `docker ps` |
 | Git | cualquiera | `git --version` |
 | IDE | VS Code (Extension Pack for Java) o IntelliJ | — |
@@ -304,6 +304,12 @@ Divididas en **3 bloques = 3 ramas = 3 Pull Requests**. Cada tarea es un commit.
 - Borrar `src/test/java/.../MsBarriodigitalReportApplicationTests.java` (no hay tests en esta entrega y ese test falla sin MySQL).
 - En `pom.xml`: completar `<name>ms-barriodigital-report</name>` y `<description>`.
 - **Commit:** `chore(report): limpieza del proyecto generado`
+
+#### 2.1b Runtime Java 25 LTS
+- En `pom.xml`, configurar `<java.version>25</java.version>`.
+- En el Dockerfile, usar Java 25 para compilación y ejecución (ver tarea 2.11b).
+- **Verificación:** `docker compose up -d --build` compila y arranca con Java 25.
+- **Commit:** `build(report): actualizar runtime a Java 25 LTS`
 
 #### 2.2 Configuración
 **Archivo:** `src/main/resources/application.properties`
