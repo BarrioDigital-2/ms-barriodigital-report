@@ -11,8 +11,8 @@
 	<groupId>cl.duoc</groupId>
 	<artifactId>ms-barriodigital-report</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
-	<name/>
-	<description/>
+	<name>ms-barriodigital-report</name>
+	<description>Microservicio de reporteria de KPIs para BarrioDigital.</description>
 	<url/>
 	<licenses>
 		<license/>
