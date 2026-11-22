@@ -433,6 +433,11 @@ Ejemplo de `/top-procedures`:
 - `IllegalArgumentException` → **400** con `{ "error": "Rango no válido: ...", "valoresPermitidos": [...] }`.
 - **Commit:** `feat(report): manejo de errores de la API`
 
+#### 2.11b Dockerfile (para el despliegue en AWS)
+Copiar `Dockerfile` y `.dockerignore` de **ms-barriodigital-catalog** y cambiar `EXPOSE 8085` por `EXPOSE 8084`.
+- **Verificación:** `docker build -t ms-barriodigital-report .` termina sin errores.
+- **Commit:** `build(report): Dockerfile multi-etapa para despliegue`
+
 #### 2.12 Prueba completa y documentación
 - Ejecutar todo §3 y pegar en el PR la salida de los `curl` (evidencia).
 - Agregar al `README.md` cómo levantar y probar (puede resumir §2 y §3 de este archivo).
