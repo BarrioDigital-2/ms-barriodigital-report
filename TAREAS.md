@@ -170,38 +170,41 @@ cd ms-barriodigital-report
 git checkout develop
 ```
 
-### 2.3 Levantar la infraestructura con Docker
+### 2.3 Levantar el servicio en Docker
 
+Para ejecutar este microservicio con MySQL y Kafka locales, desde la raíz de este repositorio:
 ```powershell
-cd barriodigital-infra/local
-docker compose up -d
-docker ps
+docker compose up -d --build
+docker compose ps
 ```
 
-Deben aparecer **5 contenedores**: `rabbit1`, `rabbit2`, `zookeeper`, `kafka`, `barriodigital-mysql`.
+Deben aparecer tres contenedores activos: `ms-barriodigital-report`, `kafka` y `barriodigital-mysql`.
+La API queda en `http://localhost:8084`; los puertos publicados para conexiones desde tu PC son Kafka `localhost:9092` y MySQL `localhost:3307`.
 
-> Más detalles y problemas comunes en el README de `barriodigital-infra`.
+Para integrar con el resto del sistema BarrioDigital, se puede usar en su lugar la infraestructura de `barriodigital-infra/local`. No levantes ambos entornos al mismo tiempo: publican los mismos puertos.
 
 | Servicio | Dirección desde tu PC | Credenciales |
 |----------|----------------------|--------------|
 | Kafka | `localhost:9092` | — |
 | MySQL | `localhost:3307` | `root` / `root` |
-| RabbitMQ (panel) | http://localhost:15672 | `barriodigital` / `barrio2026Rabbit` |
 
-> MySQL va en el **3307** porque el 3306 suele estar ocupado por un MySQL instalado en Windows.
+> MySQL va en el **3307** porque el 3306 suele estar ocupado por un MySQL instalado en Windows. Dentro de Docker, la aplicación se conecta a `mysql:3306` y `kafka:29092`.
 
-### 2.4 Levantar este microservicio
+### 2.4 Verificar este microservicio
 
 ```powershell
-cd ms-barriodigital-report
-.\mvnw spring-boot:run "-Dmaven.test.skip=true"
+docker compose logs -f report
+curl.exe "http://localhost:8084/api/report/kpis?range=last24h"
 ```
 
-> En PowerShell el `-D...` va **entre comillas**, si no Maven no lo reconoce.
-
-Debe terminar con `Started MsBarriodigitalReportApplication` y, unos segundos después, `report-processor: partitions assigned: [requests.events-0, -1, -2]`.
+La imagen compila y ejecuta con Java 25; no necesitas instalar un JDK en Windows para esta modalidad.
 
 La base `barriodigital_report` se crea sola (`createDatabaseIfNotExist=true`) y las tablas también (`ddl-auto=update`).
+Para detener el entorno sin borrar los datos:
+
+```powershell
+docker compose down
+```
 
 ### 2.5 Puertos de todo el sistema
 
@@ -226,10 +229,10 @@ Usa la consola que trae el contenedor de Kafka. Cada línea es un mensaje:
 
 ```powershell
 # Trámite creado
-'{"id":1,"tipo":"SOLICITUD_CREADA","comunaId":"Av. Siempre Viva 742","titulo":"PERMISO_OBRAS","descripcion":"Test","estado":"INGRESADO","timestamp":"2026-11-19T10:00:00"}' | docker exec -i kafka kafka-console-producer --bootstrap-server kafka:9093 --topic requests.events
+'{"id":1,"tipo":"SOLICITUD_CREADA","comunaId":"Av. Siempre Viva 742","titulo":"PERMISO_OBRAS","descripcion":"Test","estado":"INGRESADO","timestamp":"2026-11-19T10:00:00"}' | docker exec -i kafka /opt/kafka/bin/kafka-console-producer.sh --bootstrap-server localhost:29092 --topic requests.events
 
 # El mismo trámite, resuelto 2 horas después
-'{"id":1,"tipo":"SOLICITUD_ACTUALIZADA","comunaId":"Av. Siempre Viva 742","titulo":"PERMISO_OBRAS","descripcion":"Test","estado":"RESUELTO","timestamp":"2026-11-19T12:00:00"}' | docker exec -i kafka kafka-console-producer --bootstrap-server kafka:9093 --topic requests.events
+'{"id":1,"tipo":"SOLICITUD_ACTUALIZADA","comunaId":"Av. Siempre Viva 742","titulo":"PERMISO_OBRAS","descripcion":"Test","estado":"RESUELTO","timestamp":"2026-11-19T12:00:00"}' | docker exec -i kafka /opt/kafka/bin/kafka-console-producer.sh --bootstrap-server localhost:29092 --topic requests.events
 ```
 
 > Las fechas de prueba deben caer dentro del rango que consultas (`last24h` = últimas 24 h desde **ahora**). Ajusta el `timestamp` a la fecha del día.
@@ -391,7 +394,7 @@ Mismo patrón que ya funciona en **ms-barriodigital-audit**: copiar y cambiar `a
 - `config/KafkaTopicConfig.java`: `NewTopic` `report.DLT` (3 particiones, `delete`, 14 días = `1209600000`). Ver `KafkaTopicConfig` de audit.
 - `config/KafkaErrorConfig.java`: `DefaultErrorHandler` + `DeadLetterPublishingRecoverer` → `report.DLT`, `FixedBackOff(1000L, 3)`. Copiar `KafkaErrorConfig` de audit.
 - `application.properties`: agregar el producer (`spring.kafka.producer.key-serializer=...StringSerializer` y `value-serializer=...JacksonJsonSerializer`).
-- **Verificación:** `'esto no es json' | docker exec -i kafka kafka-console-producer --bootstrap-server kafka:9093 --topic requests.events` → aparece en `report.DLT` (`kafka-console-consumer --topic report.DLT --from-beginning`).
+- **Verificación:** `'esto no es json' | docker exec -i kafka /opt/kafka/bin/kafka-console-producer.sh --bootstrap-server localhost:29092 --topic requests.events` → aparece en `report.DLT` (`/opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:29092 --topic report.DLT --from-beginning`).
 - **Commit:** `feat(report): DLT con 3 reintentos hacia report.DLT`
 
 ### Bloque C: `feature/report-api` (KPIs por REST)
@@ -440,9 +443,14 @@ Ejemplo de `/top-procedures`:
 - **Commit:** `feat(report): manejo de errores de la API`
 
 #### 2.11b Dockerfile (para el despliegue en AWS)
-Copiar `Dockerfile` y `.dockerignore` de **ms-barriodigital-catalog** y cambiar `EXPOSE 8085` por `EXPOSE 8084`.
+Usar un build multi-etapa con `eclipse-temurin:25-jdk` para compilar y `eclipse-temurin:25-jre` para ejecutar; exponer el puerto `8084`.
 - **Verificación:** `docker build -t ms-barriodigital-report .` termina sin errores.
 - **Commit:** `build(report): Dockerfile multi-etapa para despliegue`
+
+#### 2.11c Docker Compose para pruebas locales
+- `compose.yaml` levanta el microservicio junto con MySQL y Kafka locales. Es para desarrollo y pruebas, no reemplaza el despliegue de AWS.
+- **Verificación:** `docker compose up -d --build` deja activos los tres contenedores y la API responde en el puerto `8084`.
+- **Commit:** `build(report): entorno local con Docker Compose`
 
 #### 2.12 Prueba completa y documentación
 - Ejecutar todo §3 y pegar en el PR la salida de los `curl` (evidencia).
