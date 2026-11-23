@@ -39,9 +39,9 @@ docker exec -it barriodigital-mysql mysql -uroot -proot barriodigital_report -e 
 Consulta los KPIs:
 
 ```powershell
-curl.exe "http://localhost:8084/api/report/kpis?range=last24h"
-curl.exe "http://localhost:8084/api/report/top-procedures?range=last7d"
-curl.exe "http://localhost:8084/api/report/kpis?range=cualquiercosa"
+curl.exe "http://localhost:8084/api/v1/report/kpis?range=last24h"
+curl.exe "http://localhost:8084/api/v1/report/top-procedures?range=last7d"
+curl.exe "http://localhost:8084/api/v1/report/kpis?range=cualquiercosa"
 ```
 
 Compila y construye la imagen:
