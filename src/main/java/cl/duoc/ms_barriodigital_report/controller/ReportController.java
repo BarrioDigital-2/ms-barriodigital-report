@@ -14,7 +14,7 @@ import cl.duoc.ms_barriodigital_report.service.ReportService;
 import lombok.RequiredArgsConstructor;
 
 @RestController
-@RequestMapping("/api/report")
+@RequestMapping("/api/v1/report")
 @RequiredArgsConstructor
 public class ReportController {
 
